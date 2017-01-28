@@ -120,7 +120,7 @@ public class FlipLayoutManager extends LinearLayoutManager {
         mCurrentPosition = newPosition;
 
         fill(recycler, state);
-        return delta;
+        return modifiedDelta;
     }
 
     @Override
