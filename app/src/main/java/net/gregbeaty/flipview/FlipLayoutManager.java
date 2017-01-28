@@ -172,9 +172,9 @@ public class FlipLayoutManager extends LinearLayoutManager {
             detachView(viewCache.valueAt(i));
         }
 
-        addView(getPreviousPosition(), viewCache, recycler);
-        addView(getCurrentPosition(), viewCache, recycler);
-        addView(getNextPosition(), viewCache, recycler);
+        addView(getPreviousPosition(), viewCache, recycler, state);
+        addView(getCurrentPosition(), viewCache, recycler, state);
+        addView(getNextPosition(), viewCache, recycler, state);
 
         for (int i = 0; i < viewCache.size(); i++) {
             final View removingView = viewCache.valueAt(i);
@@ -182,8 +182,12 @@ public class FlipLayoutManager extends LinearLayoutManager {
         }
     }
 
-    private void addView(int position, SparseArray<View> viewCache, RecyclerView.Recycler recycler) {
+    private void addView(int position, SparseArray<View> viewCache, RecyclerView.Recycler recycler, RecyclerView.State state) {
         if (position == RecyclerView.NO_POSITION) {
+            return;
+        }
+
+        if (position >= state.getItemCount()) {
             return;
         }
 
