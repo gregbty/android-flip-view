@@ -3,7 +3,6 @@ package net.gregbeaty.flipview;
 import android.content.Context;
 import android.graphics.Camera;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
@@ -13,7 +12,10 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 
-public class FlipView extends RecyclerView {
+import java.util.ArrayList;
+import java.util.List;
+
+public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositionChangeListener {
     private static final int MAX_SHADOW_ALPHA = 180;
     private static final int MAX_SHADE_ALPHA = 130;
     private static final int MAX_SHINE_ALPHA = 100;
@@ -31,6 +33,10 @@ public class FlipView extends RecyclerView {
     private final Paint mShinePaint = new Paint();
 
     private SnapScrollListener mSnapScrollListener;
+    private List<OnPositionChangeListener> mPositionChangeListeners;
+
+    private AdapterDataObserver mObserver = new AdapterDataObserver();
+    private long mCurrentItemId = NO_ID;
 
     public FlipView(Context context) {
         this(context, null);
@@ -43,12 +49,12 @@ public class FlipView extends RecyclerView {
     public FlipView(Context context, @Nullable AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
 
-        mShadowPaint.setColor(Color.BLACK);
-        mShadowPaint.setStyle(Paint.Style.FILL);
-        mShadePaint.setColor(Color.BLACK);
-        mShadePaint.setStyle(Paint.Style.FILL);
-        mShinePaint.setColor(Color.WHITE);
-        mShinePaint.setStyle(Paint.Style.FILL);
+        setItemAnimator(new DefaultItemAnimator());
+    }
+
+    @Override
+    public int getOverScrollMode() {
+        return OVER_SCROLL_NEVER;
     }
 
     @Override
@@ -78,7 +84,24 @@ public class FlipView extends RecyclerView {
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
+        if (getLayoutManager() == null) {
+            return super.onTouchEvent(e);
+        }
+
         return getLayoutManager().getScrollState() != RecyclerView.SCROLL_STATE_SETTLING && super.onTouchEvent(e);
+    }
+
+    public void setAdapter(RecyclerView.Adapter adapter) {
+        if (getAdapter() != null) {
+            getAdapter().unregisterAdapterDataObserver(mObserver);
+        }
+
+        if (adapter != null) {
+            adapter.registerAdapterDataObserver(mObserver);
+        }
+
+        super.setAdapter(adapter);
+
     }
 
     /**
@@ -89,28 +112,25 @@ public class FlipView extends RecyclerView {
     @Override
     @Deprecated
     public void setLayoutManager(LayoutManager layout) {
-        super.setLayoutManager(layout);
+        throw new UnsupportedOperationException("This view does not support customized layout managers.");
     }
 
-    public void setLayoutManager(FlipLayoutManager layout) {
-        if (mSnapScrollListener != null) {
-            removeOnScrollListener(mSnapScrollListener);
-        }
+    public void setLayoutManager(FlipLayoutManager layoutManager) {
+        mSnapScrollListener = new SnapScrollListener(layoutManager);
 
-        mSnapScrollListener = new SnapScrollListener(layout);
-        addOnScrollListener(mSnapScrollListener);
+        layoutManager.setPositionChangeListener(this);
 
-        super.setLayoutManager(layout);
-    }
-
-    @Override
-    public int getOverScrollMode() {
-        return OVER_SCROLL_NEVER;
+        super.setLayoutManager(layoutManager);
     }
 
     @Override
     public FlipLayoutManager getLayoutManager() {
         return (FlipLayoutManager) super.getLayoutManager();
+    }
+
+    @Override
+    public boolean fling(int velocityX, int velocityY) {
+        return false;
     }
 
     @Override
@@ -120,13 +140,13 @@ public class FlipView extends RecyclerView {
             return;
         }
 
-        final FlipLayoutManager layoutManager = getLayoutManager();
+        FlipLayoutManager layoutManager = getLayoutManager();
         if (layoutManager == null) {
             return;
         }
 
         final boolean isVerticalScrolling = layoutManager.getOrientation() == FlipLayoutManager.VERTICAL;
-        final int flipAngle = layoutManager.getFlipAngle();
+        final int angle = layoutManager.getAngle();
         final int previousPosition = layoutManager.getPreviousPosition();
         final int currentPosition = layoutManager.getCurrentPosition();
         final int nextPosition = layoutManager.getNextPosition();
@@ -168,7 +188,6 @@ public class FlipView extends RecyclerView {
 
             setDrawWithLayer(currentView, false);
             drawChild(canvas, currentView, 0);
-
             return;
         }
 
@@ -183,14 +202,14 @@ public class FlipView extends RecyclerView {
         //draw previous half
         canvas.save();
         canvas.clipRect(isVerticalScrolling ? mTopClippingRect : mLeftClippingRect);
-        final View previousHalf = flipAngle >= 90 ? previousView : currentView;
+        final View previousHalf = angle >= 90 ? previousView : currentView;
         if (previousHalf != null) {
             setDrawWithLayer(previousHalf, true);
             drawChild(canvas, previousHalf, 0);
         }
 
-        if (flipAngle > 90) {
-            final int alpha = (int) (((flipAngle - 90) / 90f) * MAX_SHADOW_ALPHA);
+        if (angle > 90) {
+            final int alpha = (int) (((angle - 90) / 90f) * MAX_SHADOW_ALPHA);
             mShadowPaint.setAlpha(alpha);
             canvas.drawPaint(mShadowPaint);
         }
@@ -200,15 +219,15 @@ public class FlipView extends RecyclerView {
         //draw next half
         canvas.save();
         canvas.clipRect(isVerticalScrolling ? mBottomClippingRect : mRightClippingRect);
-        final View nextHalf = flipAngle >= 90 ? currentView : nextView;
+        final View nextHalf = angle >= 90 ? currentView : nextView;
 
         if (nextHalf != null) {
             setDrawWithLayer(nextHalf, true);
             drawChild(canvas, nextHalf, 0);
         }
 
-        if (flipAngle < 90) {
-            final int alpha = (int) ((Math.abs(flipAngle - 90) / 90f) * MAX_SHADOW_ALPHA);
+        if (angle < 90) {
+            final int alpha = (int) ((Math.abs(angle - 90) / 90f) * MAX_SHADOW_ALPHA);
             mShadowPaint.setAlpha(alpha);
             canvas.drawPaint(mShadowPaint);
         }
@@ -219,19 +238,19 @@ public class FlipView extends RecyclerView {
         canvas.save();
         mCamera.save();
 
-        if (flipAngle > 90) {
+        if (angle > 90) {
             canvas.clipRect(isVerticalScrolling ? mTopClippingRect : mLeftClippingRect);
             if (isVerticalScrolling) {
-                mCamera.rotateX(flipAngle - 180);
+                mCamera.rotateX(angle - 180);
             } else {
-                mCamera.rotateY(180 - flipAngle);
+                mCamera.rotateY(180 - angle);
             }
         } else {
             canvas.clipRect(isVerticalScrolling ? mBottomClippingRect : mRightClippingRect);
             if (isVerticalScrolling) {
-                mCamera.rotateX(flipAngle);
+                mCamera.rotateX(angle);
             } else {
-                mCamera.rotateY(-flipAngle);
+                mCamera.rotateY(-angle);
             }
         }
 
@@ -247,12 +266,12 @@ public class FlipView extends RecyclerView {
         setDrawWithLayer(currentView, true);
         drawChild(canvas, currentView, 0);
 
-        if (flipAngle < 90) {
-            final int alpha = (int) ((flipAngle / 90f) * MAX_SHINE_ALPHA);
+        if (angle < 90) {
+            final int alpha = (int) ((angle / 90f) * MAX_SHINE_ALPHA);
             mShinePaint.setAlpha(alpha);
             canvas.drawRect(isVerticalScrolling ? mBottomClippingRect : mRightClippingRect, mShinePaint);
         } else {
-            final int alpha = (int) ((Math.abs(flipAngle - 180) / 90f) * MAX_SHADE_ALPHA);
+            final int alpha = (int) ((Math.abs(angle - 180) / 90f) * MAX_SHADE_ALPHA);
             mShadePaint.setAlpha(alpha);
             canvas.drawRect(isVerticalScrolling ? mTopClippingRect : mLeftClippingRect, mShadePaint);
         }
@@ -274,7 +293,134 @@ public class FlipView extends RecyclerView {
     }
 
     @Override
-    public boolean fling(int velocityX, int velocityY) {
-        return false;
+    public void onPositionChange(FlipLayoutManager layoutManager, int position) {
+        if (position != RecyclerView.NO_POSITION) {
+            mCurrentItemId = NO_ID;
+        } else if (getAdapter() == null || !getAdapter().hasStableIds()) {
+            mCurrentItemId = NO_ID;
+        } else {
+            mCurrentItemId = getAdapter().getItemId(position);
+        }
+
+        if (mPositionChangeListeners == null) {
+            return;
+        }
+
+        for (OnPositionChangeListener listener : mPositionChangeListeners) {
+            listener.onPositionChange(this, position);
+        }
+    }
+
+    @Override
+    public void onScrollStateChanged(int state) {
+        super.onScrollStateChanged(state);
+
+        mSnapScrollListener.onScrollStateChanged(this, state);
+    }
+
+    public void addOnPositionChangeListener(OnPositionChangeListener listener) {
+        if (mPositionChangeListeners == null) {
+            mPositionChangeListeners = new ArrayList<>();
+        }
+
+        mPositionChangeListeners.add(listener);
+    }
+
+    public void removeOnPositionChangeListener(OnPositionChangeListener listener) {
+        if (mPositionChangeListeners == null) {
+            return;
+        }
+
+        mPositionChangeListeners.remove(listener);
+    }
+
+    public void clearOnPositionChangeListeners() {
+        if (mPositionChangeListeners == null) {
+            return;
+        }
+
+        mPositionChangeListeners.clear();
+    }
+
+    public interface OnPositionChangeListener {
+        void onPositionChange(FlipView flipView, int position);
+    }
+
+    class AdapterDataObserver extends RecyclerView.AdapterDataObserver {
+        @Override
+        public void onChanged() {
+            notifyAdapterChange();
+
+            super.onChanged();
+        }
+
+        @Override
+        public void onItemRangeChanged(int positionStart, int itemCount) {
+            notifyAdapterChange();
+
+            super.onItemRangeChanged(positionStart, itemCount);
+        }
+
+        @Override
+        public void onItemRangeChanged(int positionStart, int itemCount, Object payload) {
+            notifyAdapterChange();
+
+            super.onItemRangeChanged(positionStart, itemCount, payload);
+        }
+
+        @Override
+        public void onItemRangeInserted(int positionStart, int itemCount) {
+            notifyAdapterChange();
+
+            super.onItemRangeInserted(positionStart, itemCount);
+        }
+
+        @Override
+        public void onItemRangeRemoved(int positionStart, int itemCount) {
+            notifyAdapterChange();
+
+            super.onItemRangeRemoved(positionStart, itemCount);
+        }
+
+        @Override
+        public void onItemRangeMoved(int fromPosition, int toPosition, int itemCount) {
+            notifyAdapterChange();
+
+            super.onItemRangeMoved(fromPosition, toPosition, itemCount);
+        }
+
+        private void notifyAdapterChange() {
+            FlipLayoutManager layoutManager = getLayoutManager();
+            Adapter adapter = getAdapter();
+
+            if (layoutManager == null) {
+                return;
+            }
+
+            layoutManager.setPositionForNextLayout(NO_POSITION);
+
+            if (adapter == null || !adapter.hasStableIds()) {
+                return;
+            }
+
+            int position = layoutManager.getCurrentPosition();
+            if (position == RecyclerView.NO_POSITION) {
+                return;
+            }
+
+            long newItemId = adapter.getItemId(position);
+            if (mCurrentItemId != NO_ID && newItemId != NO_ID && newItemId != mCurrentItemId) {
+                int itemCount = adapter.getItemCount();
+                for (int i = 0; i < itemCount; i++) {
+                    long itemId = adapter.getItemId(i);
+                    if (itemId != mCurrentItemId) {
+                        continue;
+                    }
+
+                    layoutManager.setPositionForNextLayout(i);
+                    return;
+                }
+            }
+        }
     }
 }

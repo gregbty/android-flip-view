@@ -11,12 +11,10 @@ import android.view.View;
 import android.view.ViewGroup;
 
 public class FlipLayoutManager extends LinearLayoutManager {
-    public static final int INVALID_POSITION = -1;
     public static final int HORIZONTAL = OrientationHelper.HORIZONTAL;
     public static final int VERTICAL = OrientationHelper.VERTICAL;
     public static final int DISTANCE_PER_POSITION = 180;
-    private final float MANUAL_SCROLL_SPEED = 0.5f;
-    private boolean mAllowManualScroll = true;
+    private final float INTERACTIVE_SCROLL_SPEED = 0.5f;
     private int mScrollState = RecyclerView.SCROLL_STATE_IDLE;
     private int mCurrentPosition;
     private int mScrollDistance;
@@ -24,6 +22,8 @@ public class FlipLayoutManager extends LinearLayoutManager {
     private int mDecoratedChildHeight;
     private int mPositionBeforeScroll;
     private int mScrollVector;
+    private int mPositionForNextLayout;
+    private OnPositionChangeListener mPositionChangeListener;
 
     public FlipLayoutManager(Context context, int orientation) {
         super(context, orientation, false);
@@ -32,10 +32,6 @@ public class FlipLayoutManager extends LinearLayoutManager {
     @Override
     public boolean supportsPredictiveItemAnimations() {
         return false;
-    }
-
-    public void allowManualScroll(boolean allowManualScroll) {
-        mAllowManualScroll = allowManualScroll;
     }
 
     @Override
@@ -53,17 +49,6 @@ public class FlipLayoutManager extends LinearLayoutManager {
         return getOrientation() == VERTICAL;
     }
 
-    /**
-     * @return true if manual scrolling is allowed.
-     */
-    boolean canScroll() {
-        if (!isManualScrolling()) {
-            return true;
-        }
-
-        return (canScrollHorizontally() || canScrollVertically()) && mAllowManualScroll;
-    }
-
     @Override
     public int scrollVerticallyBy(int dy, RecyclerView.Recycler recycler, RecyclerView.State state) {
         return scroll(dy, recycler, state);
@@ -79,25 +64,21 @@ public class FlipLayoutManager extends LinearLayoutManager {
             return 0;
         }
 
-        if (!canScroll()) {
-            return delta;
-        }
-
         int modifiedDelta = delta;
-        if (isManualScrolling()) {
+        if (isInteractiveScroll()) {
             modifiedDelta = (int) (modifiedDelta > 0
-                    ? Math.max(modifiedDelta * MANUAL_SCROLL_SPEED, 1)
-                    : Math.min(modifiedDelta * MANUAL_SCROLL_SPEED, -1));
+                    ? Math.max(modifiedDelta * INTERACTIVE_SCROLL_SPEED, 1)
+                    : Math.min(modifiedDelta * INTERACTIVE_SCROLL_SPEED, -1));
         }
 
         int desiredDistance = mScrollDistance + modifiedDelta;
 
-        int currentPosition = getAdapterPositionFromScrollDistance(desiredDistance);
+        int currentPosition = findPositionByScrollDistance(desiredDistance);
         if (currentPosition < 0 || currentPosition >= state.getItemCount()) {
             return 0;
         }
 
-        if (mPositionBeforeScroll == INVALID_POSITION) {
+        if (mPositionBeforeScroll == RecyclerView.NO_POSITION) {
             mPositionBeforeScroll = getCurrentPosition();
         }
 
@@ -105,15 +86,15 @@ public class FlipLayoutManager extends LinearLayoutManager {
             mScrollVector = modifiedDelta > 0 ? 1 : -1;
         }
 
-        final int maxOverFlipDistance = 70;
+        final int maxOverScrollDistance = 70;
         int minDistance = 0;
         int maxDistance = ((getItemCount() - 1) * DISTANCE_PER_POSITION);
 
-        if (desiredDistance < minDistance - maxOverFlipDistance || desiredDistance > maxDistance + maxOverFlipDistance) {
+        if (desiredDistance < minDistance - maxOverScrollDistance || desiredDistance > maxDistance + maxOverScrollDistance) {
             return 0;
         }
 
-        if (isManualScrolling()) {
+        if (isInteractiveScroll()) {
             minDistance = (mPositionBeforeScroll - 1) * DISTANCE_PER_POSITION;
             if (mScrollVector > 0) {
                 minDistance = mPositionBeforeScroll * DISTANCE_PER_POSITION;
@@ -124,24 +105,45 @@ public class FlipLayoutManager extends LinearLayoutManager {
                 maxDistance = mPositionBeforeScroll * DISTANCE_PER_POSITION;
             }
 
-            if (!allowManualScroll(desiredDistance, mPositionBeforeScroll, minDistance, maxDistance)) {
+            if (desiredDistance < minDistance || desiredDistance > maxDistance) {
                 return 0;
             }
         }
 
         mScrollDistance += modifiedDelta;
+
+        int newPosition = findPositionByScrollDistance(mScrollDistance);
+        if (mCurrentPosition != newPosition && mPositionChangeListener != null) {
+            mPositionChangeListener.onPositionChange(this, newPosition);
+        }
+
+        mCurrentPosition = newPosition;
+
         fill(recycler, state);
         return delta;
     }
 
-    protected boolean allowManualScroll(int desiredDistance, int positionBeforeScroll, int minDistance, int maxDistance) {
-        return desiredDistance >= minDistance && desiredDistance <= maxDistance;
-    }
-
     @Override
     public void onLayoutChildren(RecyclerView.Recycler recycler, RecyclerView.State state) {
+        if (state.isPreLayout()) {
+            return;
+        }
+
         if (state.getItemCount() == 0) {
             return;
+        }
+
+        if (mCurrentPosition == RecyclerView.NO_POSITION) {
+            mCurrentPosition = 0;
+        }
+
+        if (mPositionForNextLayout != RecyclerView.NO_POSITION) {
+            if (!isScrolling()) {
+                mCurrentPosition = mPositionForNextLayout;
+                mScrollDistance = mCurrentPosition * DISTANCE_PER_POSITION;
+            }
+
+            mPositionForNextLayout = RecyclerView.NO_POSITION;
         }
 
         View scrap = recycler.getViewForPosition(0);
@@ -170,8 +172,6 @@ public class FlipLayoutManager extends LinearLayoutManager {
             detachView(viewCache.valueAt(i));
         }
 
-        mCurrentPosition = getAdapterPositionFromScrollDistance(mScrollDistance);
-
         addView(getPreviousPosition(), viewCache, recycler);
         addView(getCurrentPosition(), viewCache, recycler);
         addView(getNextPosition(), viewCache, recycler);
@@ -183,7 +183,7 @@ public class FlipLayoutManager extends LinearLayoutManager {
     }
 
     private void addView(int position, SparseArray<View> viewCache, RecyclerView.Recycler recycler) {
-        if (position == INVALID_POSITION) {
+        if (position == RecyclerView.NO_POSITION) {
             return;
         }
 
@@ -199,15 +199,11 @@ public class FlipLayoutManager extends LinearLayoutManager {
         }
     }
 
-    public int getScrollState() {
-        return mScrollState;
+    public int getAngle() {
+        return getAngle(mScrollDistance);
     }
 
-    public int getFlipAngle() {
-        return getFlipAngle(mScrollDistance);
-    }
-
-    protected int getFlipAngle(int distance) {
+    private int getAngle(int distance) {
         float currentDistance = distance % DISTANCE_PER_POSITION;
 
         if (currentDistance < 0) {
@@ -217,13 +213,13 @@ public class FlipLayoutManager extends LinearLayoutManager {
         return Math.round((currentDistance / DISTANCE_PER_POSITION) * DISTANCE_PER_POSITION);
     }
 
-    private int getAdapterPositionFromScrollDistance(float distance) {
+    private int findPositionByScrollDistance(float distance) {
         return Math.round(distance / DISTANCE_PER_POSITION);
     }
 
     public int getPreviousPosition() {
         if (getCurrentPosition() - 1 < 0) {
-            return INVALID_POSITION;
+            return RecyclerView.NO_POSITION;
         }
 
         return mCurrentPosition - 1;
@@ -231,7 +227,7 @@ public class FlipLayoutManager extends LinearLayoutManager {
 
     public int getCurrentPosition() {
         if (getItemCount() == 0) {
-            return INVALID_POSITION;
+            return RecyclerView.NO_POSITION;
         }
 
         return mCurrentPosition;
@@ -239,7 +235,7 @@ public class FlipLayoutManager extends LinearLayoutManager {
 
     public int getNextPosition() {
         if (getCurrentPosition() + 1 >= getItemCount()) {
-            return INVALID_POSITION;
+            return RecyclerView.NO_POSITION;
         }
 
         return mCurrentPosition + 1;
@@ -255,25 +251,13 @@ public class FlipLayoutManager extends LinearLayoutManager {
 
         if (!isScrolling()) {
             mScrollVector = 0;
-            mPositionBeforeScroll = FlipLayoutManager.INVALID_POSITION;
+            mPositionBeforeScroll = RecyclerView.NO_POSITION;
         }
-    }
-
-    public boolean isScrolling() {
-        return mScrollState != RecyclerView.SCROLL_STATE_IDLE;
-    }
-
-    protected boolean isManualScrolling() {
-        return mScrollState == RecyclerView.SCROLL_STATE_DRAGGING;
-    }
-
-    boolean requiresSettling() {
-        return getScrollDistance() % DISTANCE_PER_POSITION != 0;
     }
 
     @Override
     public void smoothScrollToPosition(RecyclerView recyclerView, final RecyclerView.State state, final int position) {
-        final FlipSmoothScroller smoothScroller = new FlipSmoothScroller(recyclerView.getContext()) {
+        final FlipScroller smoothScroller = new FlipScroller(recyclerView.getContext()) {
             @Nullable
             @Override
             public PointF computeScrollVectorForPosition(int targetPosition) {
@@ -290,5 +274,33 @@ public class FlipLayoutManager extends LinearLayoutManager {
 
         smoothScroller.setTargetPosition(position);
         startSmoothScroll(smoothScroller);
+    }
+
+    void setPositionChangeListener(OnPositionChangeListener onPositionChangeListener) {
+        mPositionChangeListener = onPositionChangeListener;
+    }
+
+    boolean isScrolling() {
+        return getScrollState() != RecyclerView.SCROLL_STATE_IDLE;
+    }
+
+    private boolean isInteractiveScroll() {
+        return getScrollState() == RecyclerView.SCROLL_STATE_DRAGGING;
+    }
+
+    boolean requiresSettling() {
+        return getScrollDistance() % DISTANCE_PER_POSITION != 0;
+    }
+
+    int getScrollState() {
+        return mScrollState;
+    }
+
+    void setPositionForNextLayout(int positionForNextLayout) {
+        mPositionForNextLayout = positionForNextLayout;
+    }
+
+    interface OnPositionChangeListener {
+        void onPositionChange(FlipLayoutManager flipLayoutManager, int position);
     }
 }
