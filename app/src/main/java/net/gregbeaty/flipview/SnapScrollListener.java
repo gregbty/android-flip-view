@@ -6,7 +6,7 @@ import android.support.v7.widget.RecyclerView;
 class SnapScrollListener extends RecyclerView.OnScrollListener {
     private final FlipLayoutManager mLayoutManager;
 
-    public SnapScrollListener(@NonNull FlipLayoutManager layoutManager) {
+    SnapScrollListener(@NonNull FlipLayoutManager layoutManager) {
         mLayoutManager = layoutManager;
     }
 

@@ -5,8 +5,8 @@ import android.support.v7.widget.LinearSmoothScroller;
 import android.util.DisplayMetrics;
 import android.view.View;
 
-abstract class FlipSmoothScroller extends LinearSmoothScroller {
-    public FlipSmoothScroller(Context context) {
+abstract class FlipScroller extends LinearSmoothScroller {
+    FlipScroller(Context context) {
         super(context);
     }
 
@@ -31,9 +31,9 @@ abstract class FlipSmoothScroller extends LinearSmoothScroller {
     }
 
     private int calculateDeltaToMakeVisible(FlipLayoutManager layoutManager, View view) {
-        int currentScrollDistance = layoutManager.getScrollDistance();
+        int scrollDistance = layoutManager.getScrollDistance();
         int distanceForPage = layoutManager.getPosition(view) * FlipLayoutManager.DISTANCE_PER_POSITION;
-        return currentScrollDistance - distanceForPage;
+        return scrollDistance - distanceForPage;
     }
 
     @Override
