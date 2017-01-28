@@ -173,7 +173,9 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
             }
         }
 
-        assert currentView != null;
+        if (currentView == null) {
+            return;
+        }
 
         currentView.setVisibility(VISIBLE);
 
