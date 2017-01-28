@@ -146,6 +146,11 @@ public class FlipLayoutManager extends LinearLayoutManager {
             mPositionForNextLayout = RecyclerView.NO_POSITION;
         }
 
+        if (mCurrentPosition >= state.getItemCount()) {
+            mCurrentPosition = state.getItemCount() - 1;
+            mScrollDistance = mCurrentPosition * DISTANCE_PER_POSITION;
+        }
+
         View scrap = recycler.getViewForPosition(0);
         addView(scrap);
         measureChildWithMargins(scrap, 0, 0);
