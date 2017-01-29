@@ -135,20 +135,24 @@ public class FlipLayoutManager extends LinearLayoutManager {
 
         if (mCurrentPosition == RecyclerView.NO_POSITION) {
             mCurrentPosition = 0;
+            mScrollDistance = 0;
         }
 
         if (mPositionForNextLayout != RecyclerView.NO_POSITION) {
+            int position = mPositionForNextLayout;
+            mPositionForNextLayout = RecyclerView.NO_POSITION;
+
             if (!isScrolling()) {
-                mCurrentPosition = mPositionForNextLayout;
-                mScrollDistance = mCurrentPosition * DISTANCE_PER_POSITION;
+                setCurrentPosition(position);
+                return;
             }
 
             mPositionForNextLayout = RecyclerView.NO_POSITION;
         }
 
         if (mCurrentPosition >= state.getItemCount()) {
-            mCurrentPosition = state.getItemCount() - 1;
-            mScrollDistance = mCurrentPosition * DISTANCE_PER_POSITION;
+            setCurrentPosition(state.getItemCount() - 1);
+            return;
         }
 
         View scrap = recycler.getViewForPosition(0);
@@ -242,6 +246,12 @@ public class FlipLayoutManager extends LinearLayoutManager {
         return mCurrentPosition;
     }
 
+    private void setCurrentPosition(int position) {
+        mCurrentPosition = position;
+        mScrollDistance = position * DISTANCE_PER_POSITION;
+        requestLayout();
+    }
+
     public int getNextPosition() {
         if (getCurrentPosition() + 1 >= getItemCount()) {
             return RecyclerView.NO_POSITION;
@@ -283,6 +293,11 @@ public class FlipLayoutManager extends LinearLayoutManager {
 
         smoothScroller.setTargetPosition(position);
         startSmoothScroll(smoothScroller);
+    }
+
+    @Override
+    public void scrollToPosition(int position) {
+        setCurrentPosition(position);
     }
 
     void setPositionChangeListener(OnPositionChangeListener onPositionChangeListener) {
