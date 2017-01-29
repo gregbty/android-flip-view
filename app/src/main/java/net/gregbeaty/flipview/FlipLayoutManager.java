@@ -113,11 +113,10 @@ public class FlipLayoutManager extends LinearLayoutManager {
         mScrollDistance += modifiedDelta;
 
         int newPosition = findPositionByScrollDistance(mScrollDistance);
-        if (mCurrentPosition != newPosition && mPositionChangeListener != null) {
-            mPositionChangeListener.onPositionChange(this, newPosition);
-        }
+        int oldPosition = mCurrentPosition;
 
         mCurrentPosition = newPosition;
+        notifyOfPositionChange(oldPosition, newPosition);
 
         fill(recycler, state);
         return modifiedDelta;
@@ -247,8 +246,10 @@ public class FlipLayoutManager extends LinearLayoutManager {
     }
 
     private void setCurrentPosition(int position) {
+        int oldPosition = mCurrentPosition;
         mCurrentPosition = position;
         mScrollDistance = position * DISTANCE_PER_POSITION;
+        notifyOfPositionChange(oldPosition, position);
         requestLayout();
     }
 
@@ -322,6 +323,12 @@ public class FlipLayoutManager extends LinearLayoutManager {
 
     void setPositionForNextLayout(int positionForNextLayout) {
         mPositionForNextLayout = positionForNextLayout;
+    }
+
+    void notifyOfPositionChange(int oldPosition, int newPosition) {
+        if (oldPosition != newPosition && mPositionChangeListener != null) {
+            mPositionChangeListener.onPositionChange(this, newPosition);
+        }
     }
 
     interface OnPositionChangeListener {
