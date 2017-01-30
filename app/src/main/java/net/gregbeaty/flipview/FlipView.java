@@ -32,7 +32,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
     private final Paint mShadePaint = new Paint();
     private final Paint mShinePaint = new Paint();
 
-    private SnapScrollListener mSnapScrollListener;
     private List<OnPositionChangeListener> mPositionChangeListeners;
 
     private AdapterDataObserver mObserver = new AdapterDataObserver();
@@ -116,8 +115,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
     }
 
     public void setLayoutManager(FlipLayoutManager layoutManager) {
-        mSnapScrollListener = new SnapScrollListener(layoutManager);
-
         layoutManager.setPositionChangeListener(this);
 
         super.setLayoutManager(layoutManager);
@@ -147,9 +144,7 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
 
         final boolean isVerticalScrolling = layoutManager.getOrientation() == FlipLayoutManager.VERTICAL;
         final int angle = layoutManager.getAngle();
-        final int previousPosition = layoutManager.getPreviousPosition();
         final int currentPosition = layoutManager.getCurrentPosition();
-        final int nextPosition = layoutManager.getNextPosition();
 
         View previousView = null;
         View currentView = null;
@@ -157,18 +152,18 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
 
         for (int i = 0; i < viewCount; i++) {
             View view = getChildAt(i);
-            int viewAdapterPosition = getChildAdapterPosition(view);
-            if (viewAdapterPosition == previousPosition) {
+            int position = getChildAdapterPosition(view);
+            if (position == currentPosition - 1) {
                 previousView = view;
                 continue;
             }
 
-            if (viewAdapterPosition == currentPosition) {
+            if (position == currentPosition) {
                 currentView = view;
                 continue;
             }
 
-            if (viewAdapterPosition == nextPosition) {
+            if (position == currentPosition + 1) {
                 nextView = view;
             }
         }
@@ -177,28 +172,10 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
             return;
         }
 
-        currentView.setVisibility(VISIBLE);
-
         if (!layoutManager.isScrolling() && !layoutManager.requiresSettling()) {
-            if (previousView != null) {
-                previousView.setVisibility(GONE);
-            }
-
-            if (nextView != null) {
-                nextView.setVisibility(GONE);
-            }
-
-            setDrawWithLayer(currentView, false);
+            bringChildToFront(currentView);
             drawChild(canvas, currentView, 0);
             return;
-        }
-
-        if (previousView != null) {
-            previousView.setVisibility(VISIBLE);
-        }
-
-        if (nextView != null) {
-            nextView.setVisibility(VISIBLE);
         }
 
         //draw previous half
@@ -206,7 +183,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
         canvas.clipRect(isVerticalScrolling ? mTopClippingRect : mLeftClippingRect);
         final View previousHalf = angle >= 90 ? previousView : currentView;
         if (previousHalf != null) {
-            setDrawWithLayer(previousHalf, true);
             drawChild(canvas, previousHalf, 0);
         }
 
@@ -224,7 +200,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
         final View nextHalf = angle >= 90 ? currentView : nextView;
 
         if (nextHalf != null) {
-            setDrawWithLayer(nextHalf, true);
             drawChild(canvas, nextHalf, 0);
         }
 
@@ -265,7 +240,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
 
         canvas.concat(mMatrix);
 
-        setDrawWithLayer(currentView, true);
         drawChild(canvas, currentView, 0);
 
         if (angle < 90) {
@@ -280,18 +254,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
 
         mCamera.restore();
         canvas.restore();
-    }
-
-    private void setDrawWithLayer(View view, boolean drawWithLayer) {
-        if (!isHardwareAccelerated()) {
-            return;
-        }
-
-        if (view.getLayerType() != LAYER_TYPE_HARDWARE && drawWithLayer) {
-            view.setLayerType(LAYER_TYPE_HARDWARE, null);
-        } else if (view.getLayerType() != LAYER_TYPE_NONE && !drawWithLayer) {
-            view.setLayerType(LAYER_TYPE_NONE, null);
-        }
     }
 
     @Override
@@ -317,7 +279,15 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
     public void onScrollStateChanged(int state) {
         super.onScrollStateChanged(state);
 
-        mSnapScrollListener.onScrollStateChanged(this, state);
+        if (state != RecyclerView.SCROLL_STATE_IDLE) {
+            return;
+        }
+
+        if (!getLayoutManager().requiresSettling()) {
+            return;
+        }
+
+        smoothScrollToPosition(getLayoutManager().getCurrentPosition());
     }
 
     public void addOnPositionChangeListener(OnPositionChangeListener listener) {
@@ -399,8 +369,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
                 return;
             }
 
-            layoutManager.setPositionForNextLayout(NO_POSITION);
-
             if (adapter == null || !adapter.hasStableIds()) {
                 return;
             }
@@ -419,7 +387,7 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
                         continue;
                     }
 
-                    layoutManager.setPositionForNextLayout(i);
+                    layoutManager.setCurrentPosition(i, true);
                     return;
                 }
             }
