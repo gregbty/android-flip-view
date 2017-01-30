@@ -34,9 +34,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
 
     private List<OnPositionChangeListener> mPositionChangeListeners;
 
-    private AdapterDataObserver mObserver = new AdapterDataObserver();
-    private long mCurrentItemId = NO_ID;
-
     public FlipView(Context context) {
         this(context, null);
     }
@@ -88,19 +85,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
         }
 
         return getLayoutManager().getScrollState() != RecyclerView.SCROLL_STATE_SETTLING && super.onTouchEvent(e);
-    }
-
-    public void setAdapter(RecyclerView.Adapter adapter) {
-        if (getAdapter() != null) {
-            getAdapter().unregisterAdapterDataObserver(mObserver);
-        }
-
-        if (adapter != null) {
-            adapter.registerAdapterDataObserver(mObserver);
-        }
-
-        super.setAdapter(adapter);
-
     }
 
     /**
@@ -173,7 +157,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
         }
 
         if (!layoutManager.isScrolling() && !layoutManager.requiresSettling()) {
-            bringChildToFront(currentView);
             drawChild(canvas, currentView, 0);
             return;
         }
@@ -258,14 +241,6 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
 
     @Override
     public void onPositionChange(FlipLayoutManager layoutManager, int position) {
-        if (position != RecyclerView.NO_POSITION) {
-            mCurrentItemId = NO_ID;
-        } else if (getAdapter() == null || !getAdapter().hasStableIds()) {
-            mCurrentItemId = NO_ID;
-        } else {
-            mCurrentItemId = getAdapter().getItemId(position);
-        }
-
         if (mPositionChangeListeners == null) {
             return;
         }
@@ -316,81 +291,5 @@ public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositi
 
     public interface OnPositionChangeListener {
         void onPositionChange(FlipView flipView, int position);
-    }
-
-    class AdapterDataObserver extends RecyclerView.AdapterDataObserver {
-        @Override
-        public void onChanged() {
-            notifyAdapterChange();
-
-            super.onChanged();
-        }
-
-        @Override
-        public void onItemRangeChanged(int positionStart, int itemCount) {
-            notifyAdapterChange();
-
-            super.onItemRangeChanged(positionStart, itemCount);
-        }
-
-        @Override
-        public void onItemRangeChanged(int positionStart, int itemCount, Object payload) {
-            notifyAdapterChange();
-
-            super.onItemRangeChanged(positionStart, itemCount, payload);
-        }
-
-        @Override
-        public void onItemRangeInserted(int positionStart, int itemCount) {
-            notifyAdapterChange();
-
-            super.onItemRangeInserted(positionStart, itemCount);
-        }
-
-        @Override
-        public void onItemRangeRemoved(int positionStart, int itemCount) {
-            notifyAdapterChange();
-
-            super.onItemRangeRemoved(positionStart, itemCount);
-        }
-
-        @Override
-        public void onItemRangeMoved(int fromPosition, int toPosition, int itemCount) {
-            notifyAdapterChange();
-
-            super.onItemRangeMoved(fromPosition, toPosition, itemCount);
-        }
-
-        private void notifyAdapterChange() {
-            FlipLayoutManager layoutManager = getLayoutManager();
-            Adapter adapter = getAdapter();
-
-            if (layoutManager == null) {
-                return;
-            }
-
-            if (adapter == null || !adapter.hasStableIds()) {
-                return;
-            }
-
-            int position = layoutManager.getCurrentPosition();
-            if (position == RecyclerView.NO_POSITION) {
-                return;
-            }
-
-            long newItemId = adapter.getItemId(position);
-            if (mCurrentItemId != NO_ID && newItemId != NO_ID && newItemId != mCurrentItemId) {
-                int itemCount = adapter.getItemCount();
-                for (int i = 0; i < itemCount; i++) {
-                    long itemId = adapter.getItemId(i);
-                    if (itemId != mCurrentItemId) {
-                        continue;
-                    }
-
-                    layoutManager.setCurrentPosition(i, true);
-                    return;
-                }
-            }
-        }
     }
 }

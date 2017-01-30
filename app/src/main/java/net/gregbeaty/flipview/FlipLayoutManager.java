@@ -1,31 +1,30 @@
 package net.gregbeaty.flipview;
 
-import android.content.Context;
 import android.graphics.PointF;
 import android.support.annotation.Nullable;
-import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.OrientationHelper;
 import android.support.v7.widget.RecyclerView;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewGroup;
 
-public class FlipLayoutManager extends LinearLayoutManager {
+public class FlipLayoutManager extends RecyclerView.LayoutManager {
     public static final int HORIZONTAL = OrientationHelper.HORIZONTAL;
     public static final int VERTICAL = OrientationHelper.VERTICAL;
     public static final int DISTANCE_PER_POSITION = 180;
     private final float INTERACTIVE_SCROLL_SPEED = 0.5f;
+    private Integer mDecoratedChildWidth;
+    private Integer mDecoratedChildHeight;
     private int mScrollState = RecyclerView.SCROLL_STATE_IDLE;
     private int mPositionBeforeScroll = RecyclerView.NO_POSITION;
+    private final int mOrientation;
     private int mScrollVector;
     private int mCurrentPosition;
     private int mScrollDistance;
-    private int mDecoratedChildWidth;
-    private int mDecoratedChildHeight;
     private OnPositionChangeListener mPositionChangeListener;
 
-    public FlipLayoutManager(Context context, int orientation) {
-        super(context, orientation, false);
+    public FlipLayoutManager(int orientation) {
+        mOrientation = orientation;
     }
 
     @Override
@@ -40,26 +39,30 @@ public class FlipLayoutManager extends LinearLayoutManager {
 
     @Override
     public boolean canScrollHorizontally() {
-        return getOrientation() == HORIZONTAL;
+        return mOrientation == HORIZONTAL;
     }
 
     @Override
     public boolean canScrollVertically() {
-        return getOrientation() == VERTICAL;
+        return mOrientation == VERTICAL;
     }
 
     @Override
     public int scrollVerticallyBy(int dy, RecyclerView.Recycler recycler, RecyclerView.State state) {
-        return scroll(dy, recycler, state);
+        return scrollBy(dy, recycler, state);
     }
 
     @Override
     public int scrollHorizontallyBy(int dx, RecyclerView.Recycler recycler, RecyclerView.State state) {
-        return scroll(dx, recycler, state);
+        return scrollBy(dx, recycler, state);
     }
 
-    private int scroll(int delta, RecyclerView.Recycler recycler, RecyclerView.State state) {
-        if (state.getItemCount() == 0) {
+    private int scrollBy(int delta, RecyclerView.Recycler recycler, RecyclerView.State state) {
+        if (mDecoratedChildWidth == null || mDecoratedChildHeight == null) {
+            return 0;
+        }
+
+        if (getChildCount() == 0) {
             return 0;
         }
 
@@ -120,6 +123,21 @@ public class FlipLayoutManager extends LinearLayoutManager {
     }
 
     @Override
+    public void onMeasure(final RecyclerView.Recycler recycler, final RecyclerView.State state, final int widthSpec, final int heightSpec) {
+        mDecoratedChildWidth = null;
+        mDecoratedChildHeight = null;
+
+        super.onMeasure(recycler, state, widthSpec, heightSpec);
+    }
+
+    @Override
+    public void onAdapterChanged(RecyclerView.Adapter oldAdapter, RecyclerView.Adapter newAdapter) {
+        super.onAdapterChanged(oldAdapter, newAdapter);
+
+        removeAllViews();
+    }
+
+    @Override
     public void onLayoutChildren(RecyclerView.Recycler recycler, RecyclerView.State state) {
         if (state.isPreLayout()) {
             return;
@@ -131,6 +149,15 @@ public class FlipLayoutManager extends LinearLayoutManager {
             return;
         }
 
+        if (mDecoratedChildWidth == null || mDecoratedChildHeight == null) {
+            View view = recycler.getViewForPosition(0);
+            addView(view);
+            measureChildWithMargins(view, 0, 0);
+            mDecoratedChildWidth = getDecoratedMeasuredWidth(view);
+            mDecoratedChildHeight = getDecoratedMeasuredHeight(view);
+            removeAndRecycleView(view, recycler);
+        }
+
         if (mCurrentPosition == RecyclerView.NO_POSITION) {
             setCurrentPosition(0, false);
         }
@@ -139,35 +166,39 @@ public class FlipLayoutManager extends LinearLayoutManager {
             setCurrentPosition(state.getItemCount() - 1, false);
         }
 
-        View scrap = recycler.getViewForPosition(0);
-        addView(scrap);
-        measureChildWithMargins(scrap, 0, 0);
-        removeAndRecycleView(scrap, recycler);
+        detachAndScrapAttachedViews(recycler);
 
-        mDecoratedChildWidth = getDecoratedMeasuredWidth(scrap);
-        mDecoratedChildHeight = getDecoratedMeasuredHeight(scrap);
         fill(recycler, state);
     }
 
     private void fill(RecyclerView.Recycler recycler, RecyclerView.State state) {
-        detachAndScrapAttachedViews(recycler);
+        SparseArray<View> viewCache = new SparseArray<>(getChildCount());
+        for (int i = 0; i < getChildCount(); i++) {
+            final View child = getChildAt(i);
+            int position = getPosition(child);
+            viewCache.put(position, child);
+            detachView(child);
+        }
 
         boolean layoutOnlyCurrentPosition = !isScrolling() && !requiresSettling();
 
         if (!layoutOnlyCurrentPosition) {
-            addView(mCurrentPosition - 1, recycler, state);
+            addView(mCurrentPosition - 1, viewCache, recycler, state);
         }
 
-        addView(mCurrentPosition, recycler, state);
+        addView(mCurrentPosition, viewCache, recycler, state);
 
         if (!layoutOnlyCurrentPosition) {
-            addView(mCurrentPosition + 1, recycler, state);
+            addView(mCurrentPosition + 1, viewCache, recycler, state);
         }
 
-        recycler.clear();
+        for (int i = 0; i < viewCache.size(); i++) {
+            final View view = viewCache.valueAt(i);
+            recycler.recycleView(view);
+        }
     }
 
-    private void addView(int position, RecyclerView.Recycler recycler, RecyclerView.State state) {
+    private void addView(int position, SparseArray<View> viewCache, RecyclerView.Recycler recycler, RecyclerView.State state) {
         if (position == RecyclerView.NO_POSITION) {
             return;
         }
@@ -176,10 +207,16 @@ public class FlipLayoutManager extends LinearLayoutManager {
             return;
         }
 
-        View view = recycler.getViewForPosition(position);
-        addView(view);
-        measureChildWithMargins(view, 0, 0);
-        layoutDecorated(view, 0, 0, mDecoratedChildWidth, mDecoratedChildHeight);
+        View view = viewCache.get(position);
+        if (view == null) {
+            view = recycler.getViewForPosition(position);
+            addView(view);
+            measureChildWithMargins(view, 0, 0);
+            layoutDecorated(view, 0, 0, mDecoratedChildWidth, mDecoratedChildHeight);
+        } else {
+            attachView(view);
+            viewCache.remove(position);
+        }
     }
 
     public int getAngle() {
@@ -209,6 +246,10 @@ public class FlipLayoutManager extends LinearLayoutManager {
     }
 
     void setCurrentPosition(int position, boolean requestLayout) {
+        if (position == mCurrentPosition) {
+            return;
+        }
+
         int oldPosition = mCurrentPosition;
         mCurrentPosition = position;
 
@@ -219,6 +260,7 @@ public class FlipLayoutManager extends LinearLayoutManager {
         }
 
         if (requestLayout) {
+            removeAllViews();
             requestLayout();
         }
 
@@ -241,7 +283,7 @@ public class FlipLayoutManager extends LinearLayoutManager {
 
     @Override
     public void smoothScrollToPosition(RecyclerView recyclerView, final RecyclerView.State state, final int position) {
-        final FlipScroller smoothScroller = new FlipScroller(recyclerView.getContext()) {
+        final FlipSmoothScroller smoothScroller = new FlipSmoothScroller(recyclerView.getContext()) {
             @Nullable
             @Override
             public PointF computeScrollVectorForPosition(int targetPosition) {
@@ -252,7 +294,17 @@ public class FlipLayoutManager extends LinearLayoutManager {
                     throw new IllegalArgumentException("position can't be great then adapter items count. position is : " + position);
                 }
 
-                return FlipLayoutManager.this.computeScrollVectorForPosition(targetPosition);
+                if (getChildCount() == 0) {
+                    return null;
+                }
+
+                final int firstChildPos = getPosition(getChildAt(0));
+                final int direction = targetPosition < firstChildPos ? -1 : 1;
+                if (mOrientation == HORIZONTAL) {
+                    return new PointF(direction, 0);
+                } else {
+                    return new PointF(0, direction);
+                }
             }
         };
 
@@ -289,6 +341,10 @@ public class FlipLayoutManager extends LinearLayoutManager {
         if (oldPosition != newPosition && mPositionChangeListener != null) {
             mPositionChangeListener.onPositionChange(this, newPosition);
         }
+    }
+
+    public int getOrientation() {
+        return mOrientation;
     }
 
     interface OnPositionChangeListener {

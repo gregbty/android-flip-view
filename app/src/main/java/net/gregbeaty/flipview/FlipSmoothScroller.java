@@ -5,8 +5,8 @@ import android.support.v7.widget.LinearSmoothScroller;
 import android.util.DisplayMetrics;
 import android.view.View;
 
-abstract class FlipScroller extends LinearSmoothScroller {
-    FlipScroller(Context context) {
+abstract class FlipSmoothScroller extends LinearSmoothScroller {
+    FlipSmoothScroller(Context context) {
         super(context);
     }
 

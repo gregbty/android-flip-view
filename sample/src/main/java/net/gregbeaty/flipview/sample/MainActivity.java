@@ -34,7 +34,7 @@ public class MainActivity extends AppCompatActivity {
             mAdapter.addItem();
         }
 
-        mLayoutManager = new FlipLayoutManager(this, FlipLayoutManager.VERTICAL);
+        mLayoutManager = new FlipLayoutManager(FlipLayoutManager.VERTICAL);
 
         mView = (FlipView) findViewById(R.id.main_flip_view);
 
