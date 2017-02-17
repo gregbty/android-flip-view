@@ -15,7 +15,7 @@ import android.view.View;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FlipView extends RecyclerView implements FlipLayoutManager.OnPositionChangeListener {
+public class FlipView extends RecyclerView implements OnPositionChangeListener {
     private static final int MAX_SHADOW_ALPHA = 180;
     private static final int MAX_SHADE_ALPHA = 130;
     private static final int MAX_SHINE_ALPHA = 100;

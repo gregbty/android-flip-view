@@ -331,8 +331,4 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     public int getOrientation() {
         return mOrientation;
     }
-
-    interface OnPositionChangeListener {
-        void onPositionChange(FlipLayoutManager flipLayoutManager, int position);
-    }
 }
