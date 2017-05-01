@@ -258,6 +258,10 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
 
     @Override
     public void onScrollStateChanged(int state) {
+        if (mScrollState != RecyclerView.SCROLL_STATE_IDLE && state == RecyclerView.SCROLL_STATE_IDLE) {
+            requestLayout();
+        }
+
         mScrollState = state;
 
         if (!isScrolling()) {
