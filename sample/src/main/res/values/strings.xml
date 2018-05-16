@@ -1,3 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Flip View Sample</string>
+    <string name="delete_item">Delete item</string>
+    <string name="add_item">Add item</string>
+    <string name="scroll_to_end">Scroll to end</string>
+    <string name="scroll_to_beginning">Scroll to beginning</string>
 </resources>

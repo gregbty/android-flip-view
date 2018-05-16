@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/add_item"
+        android:title="@string/add_item"/>
+    <item
+        android:id="@+id/delete_item"
+        android:title="@string/delete_item"/>
+
+    <item
+        android:id="@+id/scroll_to_beginning"
+        android:title="@string/scroll_to_beginning"/>
+
+    <item
+        android:id="@+id/scroll_to_end"
+        android:title="@string/scroll_to_end"/>
+</menu>
