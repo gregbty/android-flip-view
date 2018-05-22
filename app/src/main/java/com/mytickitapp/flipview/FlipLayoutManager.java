@@ -112,7 +112,7 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
 
         final int maxOverScrollDistance = 70;
         int minDistance = 0;
-        int maxDistance = ((getItemCount() - 1) * DISTANCE_PER_POSITION);
+        int maxDistance = ((state.getItemCount() - 1) * DISTANCE_PER_POSITION);
 
         if (desiredDistance < minDistance - maxOverScrollDistance || desiredDistance > maxDistance + maxOverScrollDistance) {
             return 0;
@@ -235,8 +235,8 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
         if (getCurrentPosition() < 0) {
             scrollDistance = 0;
             positionChangedForLayout = true;
-        } else if (getCurrentPosition() >= getItemCount()) {
-            scrollDistance = (getItemCount() - 1) * DISTANCE_PER_POSITION;
+        } else if (getCurrentPosition() >= state.getItemCount()) {
+            scrollDistance = (state.getItemCount() - 1) * DISTANCE_PER_POSITION;
             positionChangedForLayout = true;
         }
 
@@ -251,14 +251,14 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     private void fill(RecyclerView.Recycler recycler, RecyclerView.State state) {
         removeAndRecycleAllViews(recycler);
 
-        boolean layoutOnlyCurrentPosition = !isScrolling() && !requiresSettling();
+        boolean layoutOnlyCurrentPosition = !isScrolling() && !requiresSettling() && !state.hasTargetScrollPosition();
 
         if (!layoutOnlyCurrentPosition && getCurrentPosition() - 1 >= 0) {
             addView(getCurrentPosition() - 1, recycler, state);
         }
 
 
-        if (!layoutOnlyCurrentPosition && getCurrentPosition() + 1 <= getItemCount() - 1) {
+        if (!layoutOnlyCurrentPosition && getCurrentPosition() + 1 <= state.getItemCount() - 1) {
             addView(getCurrentPosition() + 1, recycler, state);
         }
 
@@ -267,11 +267,7 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     }
 
     private void addView(int position, RecyclerView.Recycler recycler, RecyclerView.State state) {
-        if (position == RecyclerView.NO_POSITION) {
-            return;
-        }
-
-        if (position >= state.getItemCount()) {
+        if (position < 0 || position >= state.getItemCount()) {
             return;
         }
 
@@ -322,8 +318,7 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
                     return null;
                 }
 
-                final int firstChildPos = getPosition(getChildAt(0));
-                final int direction = targetPosition < firstChildPos ? -1 : 1;
+                final int direction = targetPosition < getCurrentPosition() ? -1 : 1;
                 if (getOrientation() == HORIZONTAL) {
                     return new PointF(direction, 0);
                 } else {
