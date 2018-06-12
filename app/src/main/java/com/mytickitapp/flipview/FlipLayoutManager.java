@@ -35,12 +35,10 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
             public void onItemRangeRemoved(int positionStart, int itemCount) {
                 super.onItemRangeRemoved(positionStart, itemCount);
 
-                if (getCurrentPosition() < positionStart) {
-                    return;
+                if (positionStart + itemCount <= getCurrentPosition()) {
+                    scrollDistance = (getCurrentPosition() - itemCount) * DISTANCE_PER_POSITION;
+                    notifyPositionChange(getCurrentPosition());
                 }
-
-                scrollDistance = (getCurrentPosition() - 1) * DISTANCE_PER_POSITION;
-                notifyPositionChange(getCurrentPosition());
             }
         };
     }
