@@ -17,7 +17,6 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     private final float INTERACTIVE_SCROLL_SPEED = 0.5f;
     private final int orientation;
     private final RecyclerView recyclerView;
-    private final RecyclerView.AdapterDataObserver dataObserver;
     private Integer decoratedChildWidth;
     private Integer decoratedChildHeight;
     private boolean positionChangedForLayout;
@@ -27,22 +26,10 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     private OnPositionChangeListener onPositionChangeListener;
 
     FlipLayoutManager(final RecyclerView recyclerView, int orientation) {
+        Timber.tag(getClass().getSimpleName());
+
         this.recyclerView = recyclerView;
         this.orientation = orientation;
-
-        dataObserver = new RecyclerView.AdapterDataObserver() {
-            @Override
-            public void onItemRangeRemoved(int positionStart, int itemCount) {
-                super.onItemRangeRemoved(positionStart, itemCount);
-
-                if (getCurrentPosition() < positionStart) {
-                    return;
-                }
-
-                scrollDistance = (getCurrentPosition() - 1) * DISTANCE_PER_POSITION;
-                notifyPositionChange(getCurrentPosition());
-            }
-        };
     }
 
     public int getOrientation() {
@@ -191,19 +178,25 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     public void onAdapterChanged(RecyclerView.Adapter oldAdapter, RecyclerView.Adapter newAdapter) {
         super.onAdapterChanged(oldAdapter, newAdapter);
 
-        if (oldAdapter != null) {
-            oldAdapter.unregisterAdapterDataObserver(dataObserver);
-        }
-
-        if (newAdapter != null) {
-            newAdapter.registerAdapterDataObserver(dataObserver);
-        }
-
         removeAllViews();
     }
 
     @Override
+    public void onItemsRemoved(RecyclerView recyclerView, int positionStart, int itemCount) {
+        super.onItemsRemoved(recyclerView, positionStart, itemCount);
+
+        if (positionStart + itemCount <= getCurrentPosition()) {
+            Timber.d("onItemsRemoved");
+
+            scrollDistance = (getCurrentPosition() -  itemCount) * DISTANCE_PER_POSITION;
+            notifyPositionChange(getCurrentPosition());
+        }
+    }
+
+    @Override
     public void onMeasure(final RecyclerView.Recycler recycler, final RecyclerView.State state, final int widthSpec, final int heightSpec) {
+        Timber.d("onMeasure");
+
         decoratedChildWidth = null;
         decoratedChildHeight = null;
 
@@ -213,10 +206,12 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     @Override
     public void onLayoutChildren(RecyclerView.Recycler recycler, RecyclerView.State state) {
         if (state.isPreLayout()) {
+            Timber.d("onLayoutChildren: pre layout");
             return;
         }
 
         if (state.getItemCount() == 0) {
+            Timber.d("onLayoutChildren: no items");
             removeAndRecycleAllViews(recycler);
             scrollDistance = 0;
             notifyPositionChange(-1);
@@ -224,6 +219,7 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
         }
 
         if (decoratedChildWidth == null || decoratedChildHeight == null) {
+            Timber.d("onLayoutChildren: measuring");
             View view = recycler.getViewForPosition(0);
             addView(view);
             measureChildWithMargins(view, 0, 0);
@@ -240,9 +236,12 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
             positionChangedForLayout = true;
         }
 
+
         fill(recycler, state);
+        Timber.d("onLayoutChildren: added %s views", getItemCount());
 
         if (positionChangedForLayout) {
+            Timber.d("onLayoutChildren: notify position changed to %s", getCurrentPosition());
             positionChangedForLayout = false;
             notifyPositionChange(getCurrentPosition());
         }
@@ -263,7 +262,6 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
         }
 
         addView(getCurrentPosition(), recycler, state);
-
     }
 
     private void addView(int position, RecyclerView.Recycler recycler, RecyclerView.State state) {
