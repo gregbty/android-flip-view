@@ -1,6 +1,7 @@
 package net.gregbeaty.flipview.sample;
 
 import android.graphics.Color;
+import android.support.annotation.NonNull;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -10,6 +11,8 @@ import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Random;
+
+import timber.log.Timber;
 
 public class SampleAdapter extends RecyclerView.Adapter<SampleAdapter.ViewHolder> {
     private final Random random = new Random();
@@ -40,8 +43,17 @@ public class SampleAdapter extends RecyclerView.Adapter<SampleAdapter.ViewHolder
 
     @Override
     public void onBindViewHolder(SampleAdapter.ViewHolder holder, int position) {
+        Timber.d("onBindViewHolder: %d", position);
+
         holder.text.setText(String.format(Locale.getDefault(), "%d", items.get(position)));
         holder.itemView.setBackgroundColor(colors.get(position));
+    }
+
+    @Override
+    public void onViewRecycled(@NonNull ViewHolder holder) {
+        Timber.d("onViewRecycled");
+
+        holder.text.setText("Unbound");
     }
 
     @Override

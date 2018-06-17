@@ -8,6 +8,8 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
+import java.util.List;
+
 import timber.log.Timber;
 
 public class FlipLayoutManager extends RecyclerView.LayoutManager {
@@ -23,6 +25,8 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     private int positionBeforeScroll = RecyclerView.NO_POSITION;
     private int scrollVector;
     private int scrollDistance;
+    private int prevWidthSpec = -1;
+    private int prevHeightSpec = -1;
     private OnPositionChangeListener onPositionChangeListener;
 
     FlipLayoutManager(final RecyclerView recyclerView, int orientation) {
@@ -67,10 +71,6 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     }
 
     private int scrollBy(int delta, RecyclerView.Recycler recycler, RecyclerView.State state) {
-        if (decoratedChildWidth == null || decoratedChildHeight == null) {
-            return 0;
-        }
-
         if (getChildCount() == 0) {
             return 0;
         }
@@ -188,17 +188,22 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
         if (positionStart + itemCount <= getCurrentPosition()) {
             Timber.d("onItemsRemoved");
 
-            scrollDistance = (getCurrentPosition() -  itemCount) * DISTANCE_PER_POSITION;
+            scrollDistance = (getCurrentPosition() - itemCount) * DISTANCE_PER_POSITION;
             notifyPositionChange(getCurrentPosition());
         }
     }
 
     @Override
     public void onMeasure(final RecyclerView.Recycler recycler, final RecyclerView.State state, final int widthSpec, final int heightSpec) {
-        Timber.d("onMeasure");
+        if (prevWidthSpec != widthSpec || prevHeightSpec != heightSpec) {
+            Timber.d("onMeasure");
 
-        decoratedChildWidth = null;
-        decoratedChildHeight = null;
+            prevWidthSpec = widthSpec;
+            prevHeightSpec = heightSpec;
+
+            decoratedChildWidth = null;
+            decoratedChildHeight = null;
+        }
 
         super.onMeasure(recycler, state, widthSpec, heightSpec);
     }
@@ -212,11 +217,13 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
 
         if (state.getItemCount() == 0) {
             Timber.d("onLayoutChildren: no items");
-            removeAndRecycleAllViews(recycler);
+            removeAllViews();
             scrollDistance = 0;
             notifyPositionChange(-1);
             return;
         }
+
+        detachAndScrapAttachedViews(recycler);
 
         if (decoratedChildWidth == null || decoratedChildHeight == null) {
             Timber.d("onLayoutChildren: measuring");
@@ -225,7 +232,7 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
             measureChildWithMargins(view, 0, 0);
             decoratedChildWidth = getDecoratedMeasuredWidth(view);
             decoratedChildHeight = getDecoratedMeasuredHeight(view);
-            removeAndRecycleView(view, recycler);
+            detachAndScrapView(view, recycler);
         }
 
         if (getCurrentPosition() < 0) {
@@ -236,8 +243,8 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
             positionChangedForLayout = true;
         }
 
-
         fill(recycler, state);
+
         Timber.d("onLayoutChildren: added %s views", getItemCount());
 
         if (positionChangedForLayout) {
@@ -248,7 +255,7 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     }
 
     private void fill(RecyclerView.Recycler recycler, RecyclerView.State state) {
-        removeAndRecycleAllViews(recycler);
+        detachAndScrapAttachedViews(recycler);
 
         boolean layoutOnlyCurrentPosition = !isScrolling() && !requiresSettling() && !state.hasTargetScrollPosition();
 
@@ -256,12 +263,21 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
             addView(getCurrentPosition() - 1, recycler, state);
         }
 
-
         if (!layoutOnlyCurrentPosition && getCurrentPosition() + 1 <= state.getItemCount() - 1) {
             addView(getCurrentPosition() + 1, recycler, state);
         }
 
         addView(getCurrentPosition(), recycler, state);
+
+        if (!recycler.getScrapList().isEmpty()) {
+            final List<RecyclerView.ViewHolder> scrapList = recycler.getScrapList();
+            final int count = scrapList.size();
+
+            for (int i = count - 1; i > 0; i--) {
+                RecyclerView.ViewHolder viewHolder = scrapList.get(i);
+                removeAndRecycleView(viewHolder.itemView, recycler);
+            }
+        }
     }
 
     private void addView(int position, RecyclerView.Recycler recycler, RecyclerView.State state) {
@@ -337,6 +353,8 @@ public class FlipLayoutManager extends RecyclerView.LayoutManager {
     }
 
     public void notifyPositionChange(int position) {
+        Timber.d("notifyPositionChange: %d", position);
+
         onPositionChangeListener.onPositionChange(this, position);
     }
 
