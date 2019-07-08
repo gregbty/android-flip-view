@@ -2,8 +2,8 @@ package net.gregbeaty.flipview;
 
 import android.content.Context;
 import android.content.res.TypedArray;
-import android.support.annotation.NonNull;
-import android.support.v7.widget.RecyclerView;
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,8 +11,6 @@ import android.widget.FrameLayout;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import timber.log.Timber;
 
 public class FlipView extends FrameLayout {
     public static final int SCROLL_STATE_DRAGGING = RecyclerView.SCROLL_STATE_DRAGGING;
